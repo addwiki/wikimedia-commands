@@ -2,12 +2,12 @@
 
 namespace Addwiki\Commands\Wikimedia;
 
+use ArrayAccess;
 use DataValues\Deserializers\DataValueDeserializer;
 use DataValues\Serializers\DataValueSerializer;
 use Mediawiki\Api\ApiUser;
 use Mediawiki\Api\MediawikiApi;
 use Mediawiki\Api\MediawikiFactory;
-use Addwiki\Config\AppConfig;
 use Mediawiki\DataModel\Content;
 use Mediawiki\DataModel\PageIdentifier;
 use Mediawiki\DataModel\Revision;
@@ -28,14 +28,14 @@ class ExtensionToWikidata extends Command {
 
 	private $appConfig;
 
-	public function __construct( AppConfig $appConfig ) {
+	public function __construct( ArrayAccess $appConfig ) {
 		$this->appConfig = $appConfig;
 		parent::__construct( null );
 	}
 
 	protected function configure() {
-		$defaultWiki = $this->appConfig->get( 'defaults.wiki' );
-		$defaultUser = $this->appConfig->get( 'defaults.user' );
+		$defaultWiki = $this->appConfig->offsetGet( 'defaults.wiki' );
+		$defaultUser = $this->appConfig->offsetGet( 'defaults.user' );
 
 		$this
 			->setName( 'wm:exttowd' )

@@ -2,6 +2,7 @@
 
 namespace Addwiki\Commands\Wikimedia\WikidataReferencer;
 
+use ArrayAccess;
 use DataValues\Deserializers\DataValueDeserializer;
 use DataValues\Serializers\DataValueSerializer;
 use Exception;
@@ -12,7 +13,6 @@ use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Request;
 use Mediawiki\Api\ApiUser;
 use Mediawiki\Api\MediawikiApi;
-use Addwiki\Config\AppConfig;
 use Mediawiki\DataModel\PageIdentifier;
 use Mediawiki\DataModel\Title;
 use Psr\Http\Message\ResponseInterface;
@@ -71,7 +71,7 @@ class WikidataReferencerCommand extends Command {
 	 */
 	private $instanceMap = array();
 
-	public function __construct( AppConfig $appConfig ) {
+	public function __construct( ArrayAccess $appConfig ) {
 		$stack = HandlerStack::create();
 		$stack->push( EffectiveUrlMiddleware::middleware() );
 		$defaultGuzzleConf = array(
@@ -178,7 +178,7 @@ class WikidataReferencerCommand extends Command {
 	}
 
 	protected function configure() {
-		$defaultUser = $this->appConfig->get( 'defaults.user' );
+		$defaultUser = $this->appConfig->offsetGet( 'defaults.user' );
 
 		$this
 			->setName( 'wm:wd:ref' )
@@ -233,7 +233,7 @@ class WikidataReferencerCommand extends Command {
 
 		// Get options
 		$user = $input->getOption( 'user' );
-		$userDetails = $this->appConfig->get( 'users.' . $user );
+		$userDetails = $this->appConfig->offsetGet( 'users.' . $user );
 		if ( $userDetails === null ) {
 			throw new RuntimeException( 'User not found in config' );
 		}
