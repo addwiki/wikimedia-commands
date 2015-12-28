@@ -1,6 +1,6 @@
 <?php
 
-namespace Mediawiki\Bot\Commands\Wikimedia\WikidataReferencer;
+namespace Addwiki\Commands\Wikimedia\WikidataReferencer;
 
 use InvalidArgumentException;
 use Mediawiki\Api\MediawikiApi;

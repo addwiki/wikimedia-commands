@@ -1,6 +1,6 @@
 <?php
 
-namespace Mediawiki\Bot\Commands\Wikimedia;
+namespace Addwiki\Commands\Wikimedia;
 
 use DataValues\Deserializers\DataValueDeserializer;
 use DataValues\Serializers\DataValueSerializer;
