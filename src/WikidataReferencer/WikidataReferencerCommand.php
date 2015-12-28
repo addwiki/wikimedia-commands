@@ -12,7 +12,7 @@ use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Request;
 use Mediawiki\Api\ApiUser;
 use Mediawiki\Api\MediawikiApi;
-use Mediawiki\Bot\Config\AppConfig;
+use Addwiki\Config\AppConfig;
 use Mediawiki\DataModel\PageIdentifier;
 use Mediawiki\DataModel\Title;
 use Psr\Http\Message\ResponseInterface;

@@ -7,7 +7,7 @@ use DataValues\Serializers\DataValueSerializer;
 use Mediawiki\Api\ApiUser;
 use Mediawiki\Api\MediawikiApi;
 use Mediawiki\Api\MediawikiFactory;
-use Mediawiki\Bot\Config\AppConfig;
+use Addwiki\Config\AppConfig;
 use Mediawiki\DataModel\Content;
 use Mediawiki\DataModel\PageIdentifier;
 use Mediawiki\DataModel\Revision;
