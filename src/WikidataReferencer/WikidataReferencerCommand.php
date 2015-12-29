@@ -294,6 +294,7 @@ class WikidataReferencerCommand extends Command {
 		foreach ( $itemIds as $itemId ) {
 			$itemIdString = $itemId->getSerialization();
 
+			$output->writeln( '----------------------------------------------------' );
 
 			if( !$force && in_array( $itemId->getSerialization(), $processedItemIdStrings ) ) {
 				$output->writeln( $formatter->formatSection( $itemIdString, 'Already processed' ) );
@@ -333,7 +334,7 @@ class WikidataReferencerCommand extends Command {
 				'wiki'
 			);
 
-			$output->writeln( $formatter->formatSection( $itemIdString, $siteLinkList->count() . ' Wikipedia pages to parse for links' ) );
+			$output->writeln( $formatter->formatSection( $itemIdString, $siteLinkList->count() . ' Wikipedia pages to (request, action)' ) );
 			$parseProgressBar = new ProgressBar( $output, $siteLinkList->count() * 2 );
 			$parseProgressBar->display();
 			/** @var PromiseInterface[] $parsePromises */
@@ -390,14 +391,14 @@ class WikidataReferencerCommand extends Command {
 			}
 
 
-			$output->writeln( $formatter->formatSection( $itemIdString, count( $linkRequests ) . ' External links to load' ) );
+			$output->writeln( $formatter->formatSection( $itemIdString, count( $linkRequests ) . ' External links to (request, download, action)' ) );
 			if ( empty( $linkRequests ) ) {
 				continue;
 			}
 
 			// Make a bunch of requests and act on the responses
 			$referencesAddedToItem = 0;
-			$externalLinkProgressBar = new ProgressBar( $output, count( $linkRequests ) );
+			$externalLinkProgressBar = new ProgressBar( $output, count( $linkRequests ) * 3 );
 			$externalLinkProgressBar->display();
 			foreach( array_chunk( $linkRequests, 100 ) as $linkRequestChunk ) {
 				$linkResponses = Pool::batch(
@@ -405,14 +406,15 @@ class WikidataReferencerCommand extends Command {
 					$linkRequestChunk,
 					array(
 						'fulfilled' => function () use ( $externalLinkProgressBar ) {
-							$externalLinkProgressBar->advance();
+							$externalLinkProgressBar->advance(); // 2nd advance point
 						},
 						'rejected' => function () use ( $externalLinkProgressBar ) {
 							// TODO add this to some kind of verbose log?
-							$externalLinkProgressBar->advance();
+							$externalLinkProgressBar->advance(); // 2nd advance point
 						},
 					)
 				);
+				$externalLinkProgressBar->advance( count( $linkRequestChunk ) ); // 1st advance point
 				$linkToHtmlMap = array();
 				foreach( $linkResponses as $response ) {
 					if( $response instanceof ResponseInterface ) {
@@ -433,6 +435,7 @@ class WikidataReferencerCommand extends Command {
 								}
 						}
 					}
+					$externalLinkProgressBar->advance(); // 3rd advance point
 				}
 			}
 			$externalLinkProgressBar->finish();
