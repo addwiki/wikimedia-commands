@@ -3,11 +3,14 @@
 namespace Addwiki\Commands\Wikimedia;
 
 use ArrayAccess;
+use Asparagus\QueryBuilder;
 use DataValues\Deserializers\DataValueDeserializer;
 use DataValues\Serializers\DataValueSerializer;
 use DataValues\TimeValue;
+use GuzzleHttp\Client;
 use Mediawiki\Api\ApiUser;
 use Mediawiki\Api\MediawikiApi;
+use Mediawiki\Api\UsageException;
 use Mediawiki\DataModel\EditInfo;
 use RuntimeException;
 use Symfony\Component\Console\Command\Command;
@@ -38,8 +41,19 @@ class WikidataReferenceDateFixer extends Command {
 	 */
 	private $wikibaseApi;
 
+	/**
+	 * @var SparqlQueryRunner
+	 */
+	private $sparqlQueryRunner;
+
 	public function __construct( ArrayAccess $appConfig ) {
 		$this->appConfig = $appConfig;
+
+		$defaultGuzzleConf = array(
+			'headers' => array( 'User-Agent' => 'addwiki - Wikidata Reference Date Fixer' )
+		);
+		$guzzleClient = new Client( $defaultGuzzleConf );
+		$this->sparqlQueryRunner = new SparqlQueryRunner( $guzzleClient );
 
 		$this->wikibaseApi = new MediawikiApi( "https://www.wikidata.org/w/api.php" );
 		$this->wikibaseFactory = new WikibaseFactory(
@@ -67,8 +81,8 @@ class WikidataReferenceDateFixer extends Command {
 		$defaultUser = $this->appConfig->offsetGet( 'defaults.user' );
 
 		$this
-			->setName( 'wm:wd:ref-retrieved-cal-fix' )
-			->setDescription( 'Switches reference calendar models to Gregorian' )
+			->setName( 'wm:wd:ref-retrieved-date-fix' )
+			->setDescription( 'Fixes reference retrieved dates' )
 			->addOption(
 				'user',
 				null,
@@ -95,14 +109,33 @@ class WikidataReferenceDateFixer extends Command {
 		$items = $input->getOption( 'item' );
 
 		if( empty( $items ) ) {
-			throw new RuntimeException( 'You must pass an item' );
+			$output->writeln( 'Running SPARQL query to find items to check' );
+			$queryBuilder = new QueryBuilder( array(
+				'prov' => 'http://www.w3.org/ns/prov#',
+				'wd' => 'http://www.wikidata.org/entity/',
+				'wikibase' => 'http://wikiba.se/ontology#',
+				'prv' => 'http://www.wikidata.org/prop/reference/value/',
+			) );
+			$itemIds = $this->sparqlQueryRunner->getItemIdsFromQuery(
+				$queryBuilder
+				->select( '?item' )
+				->where( '?ref', 'prv:P813', '?value' )
+				->also( '?value', 'wikibase:timeCalendarModel', 'wd:Q1985786' )
+				->also( '?st', 'prov:wasDerivedFrom', '?ref' )
+				->also( '?item', '?pred', '?st' )
+				->limit( 10000 )
+				->__toString()
+			);
+		} else {
+			/** @var ItemId[] $itemIds */
+			$itemIds = array();
+			foreach( array_unique( $items ) as $itemIdString ) {
+				$itemIds[] = new ItemId( $itemIdString );
+			}
 		}
 
-		/** @var ItemId[] $itemIds */
-		$itemIds = array();
-		foreach( array_unique( $items ) as $itemIdString ) {
-			$itemIds[] = new ItemId( $itemIdString );
-		}
+		$itemIds = array_unique( $itemIds );
+		$output->writeln( 'Running for ' . count( $itemIds ) . ' items' );
 
 		// Log in to Wikidata
 		$loggedIn =
@@ -126,7 +159,7 @@ class WikidataReferenceDateFixer extends Command {
 							if ( $snak->getPropertyId()->getSerialization() == 'P813' ) {
 								/** @var TimeValue $dataValue */
 								$dataValue = $snak->getDataValue();
-								// We can assume ALL retreival dates should be Gregorian!
+								// We can assume ALL retrieval dates should be Gregorian!
 								if ( $dataValue->getCalendarModel() === TimeValue::CALENDAR_JULIAN ) {
 									$oldRefHash = $reference->getHash();
 									$statementGuid = $statement->getGuid();
@@ -134,29 +167,43 @@ class WikidataReferenceDateFixer extends Command {
 									$snakList = $reference->getSnaks();
 									$snakList = new SnakList( $snakList->getArrayCopy() );
 									$snakList->removeSnak( $snak );
-									$snakList->addSnak(
-										new PropertyValueSnak(
-											new PropertyId( 'P813' ),
-											new TimeValue(
-												$dataValue->getTime(),
-												$dataValue->getTimezone(),
-												$dataValue->getBefore(),
-												$dataValue->getAfter(),
-												$dataValue->getPrecision(),
-												TimeValue::CALENDAR_GREGORIAN
-											)
-										)
-									);
 
-									$this->wikibaseFactory->newReferenceSetter()->set(
-										new Reference( $snakList ),
-										$statementGuid,
-										$oldRefHash,
-										new EditInfo(
-											'Switch Julian retrieval date calendar model to Gregorian'
-										)
-									);
-									$output->write( '.' );
+									$fixedTimestamp = $this->getFixedTimestamp( $dataValue->getTime() );
+
+									if( $fixedTimestamp ) {
+										$snakList->addSnak(
+											new PropertyValueSnak(
+												new PropertyId( 'P813' ),
+												new TimeValue(
+													$fixedTimestamp,
+													$dataValue->getTimezone(),
+													$dataValue->getBefore(),
+													$dataValue->getAfter(),
+													$dataValue->getPrecision(),
+													TimeValue::CALENDAR_GREGORIAN
+												)
+											)
+										);
+										$editSummary = 'Fix reference retrieval date';
+										$output->write( '.' );
+									} else {
+										//TODO optionally remove rather than always doing so?
+										$editSummary = 'Removing bad reference retrieval date';
+										$output->write( 'x' );
+									}
+
+									try{
+										$this->wikibaseFactory->newReferenceSetter()->set(
+											new Reference( $snakList ),
+											$statementGuid,
+											$oldRefHash,
+											new EditInfo( $editSummary )
+										);
+									} catch ( UsageException $e ) {
+										$output->writeln( '' );
+										$output->write( $e->getMessage() );
+									}
+
 								}
 							}
 						}
@@ -167,6 +214,35 @@ class WikidataReferenceDateFixer extends Command {
 		}
 
 		return 0;
+	}
+
+	/**
+	 * @param string $timestamp
+	 *
+	 * @return string|bool false if we cant really tell how to fix this
+	 */
+	private function getFixedTimestamp( $timestamp ) {
+		$currentYear = date( 'Y' );
+		$lastYear = ( (int)date( 'Y' ) ) - 1;
+
+		$swaps = array(
+			'000' . substr( $currentYear, 3, 1 ) => $currentYear,
+			'00' . substr( $currentYear, 2, 2 ) => $currentYear,
+			'0' . substr( $currentYear, 1, 3 ) => $currentYear,
+			'0' . substr( $currentYear, 0, 1 ) . substr( $currentYear, 2, 2 ) => $currentYear,
+			'000' . substr( $lastYear, 3, 1 ) => $lastYear,
+			'00' . substr( $lastYear, 2, 2 ) => $lastYear,
+			'0' . substr( $lastYear, 1, 3 ) => $lastYear,
+			'0' . substr( $lastYear, 0, 1 ) . substr( $lastYear, 2, 2 ) => $lastYear,
+		);
+
+		foreach( $swaps as $match => $replace ) {
+			if( strstr( $timestamp, $match ) ) {
+				return str_replace( $match, $replace, $timestamp );
+			}
+		}
+
+		return false;
 	}
 
 }

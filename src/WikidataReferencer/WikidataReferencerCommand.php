@@ -2,6 +2,7 @@
 
 namespace Addwiki\Commands\Wikimedia\WikidataReferencer;
 
+use Addwiki\Commands\Wikimedia\SparqlQueryRunner;
 use ArrayAccess;
 use DataValues\Deserializers\DataValueDeserializer;
 use DataValues\Serializers\DataValueSerializer;
