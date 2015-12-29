@@ -74,20 +74,19 @@ class WikidataReferencerCommand extends Command {
 	private $instanceMap = array();
 
 	public function __construct( ArrayAccess $appConfig ) {
-		$stack = HandlerStack::create();
-		$stack->push( EffectiveUrlMiddleware::middleware() );
-		$defaultGuzzleConf = array(
-			'headers' => array( 'User-Agent' => 'addwiki - Wikidata Referencer' ),
-			'handler' => $stack,
-		);
-		$guzzleClient = new Client( $defaultGuzzleConf );
-
 		$this->appConfig = $appConfig;
 
-		$this->wmFactoryFactory = new WikimediaMediawikiFactoryFactory( new ClientFactory() );
+		$clientFactory = new ClientFactory(
+			array(
+				'middleware' => array( EffectiveUrlMiddleware::middleware() ),
+				'user-agent' => 'Addwiki - Wikidata Referencer',
+			)
+		);
+
+		$this->wmFactoryFactory = new WikimediaMediawikiFactoryFactory( $clientFactory );
 		$this->microDataExtractor = new MicrodataExtractor();
-		$this->sparqlQueryRunner = new SparqlQueryRunner( $guzzleClient );
-		$this->externalLinkClient = $guzzleClient;
+		$this->sparqlQueryRunner = new SparqlQueryRunner( $clientFactory->getClient() );
+		$this->externalLinkClient = $clientFactory->getClient();
 
 		$this->wikibaseApi = new MediawikiApi( "https://www.wikidata.org/w/api.php" );
 		$this->wikibaseFactory = new WikibaseFactory(
