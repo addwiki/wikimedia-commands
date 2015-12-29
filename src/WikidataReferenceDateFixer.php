@@ -225,6 +225,7 @@ class WikidataReferenceDateFixer extends Command {
 		$currentYear = date( 'Y' );
 		$lastYear = ( (int)date( 'Y' ) ) - 1;
 
+		// Try a bunch of common misstypes
 		$swaps = array(
 			'000' . substr( $currentYear, 3, 1 ) => $currentYear,
 			'00' . substr( $currentYear, 2, 2 ) => $currentYear,
@@ -235,13 +236,22 @@ class WikidataReferenceDateFixer extends Command {
 			'0' . substr( $lastYear, 1, 3 ) => $lastYear,
 			'0' . substr( $lastYear, 0, 1 ) . substr( $lastYear, 2, 2 ) => $lastYear,
 		);
-
 		foreach( $swaps as $match => $replace ) {
 			if( strstr( $timestamp, $match ) ) {
 				return str_replace( $match, $replace, $timestamp );
 			}
 		}
 
+		// Also allow the last 10 years!
+		$year = $currentYear;
+		while( $year >= $currentYear - 10 ) {
+			if( strstr( $timestamp, $year ) ) {
+				return $timestamp;
+			}
+			$year = $year - 1;
+		}
+
+		// Otherwise give up guessing
 		return false;
 	}
 
