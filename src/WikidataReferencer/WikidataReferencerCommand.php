@@ -82,13 +82,14 @@ class WikidataReferencerCommand extends Command {
 				'user-agent' => 'Addwiki - Wikidata Referencer',
 			)
 		);
+		$guzzleClient = $clientFactory->getClient();
 
 		$this->wmFactoryFactory = new WikimediaMediawikiFactoryFactory( $clientFactory );
 		$this->microDataExtractor = new MicrodataExtractor();
-		$this->sparqlQueryRunner = new SparqlQueryRunner( $clientFactory->getClient() );
-		$this->externalLinkClient = $clientFactory->getClient();
+		$this->sparqlQueryRunner = new SparqlQueryRunner( $guzzleClient );
+		$this->externalLinkClient = $guzzleClient;
 
-		$this->wikibaseApi = new MediawikiApi( "https://www.wikidata.org/w/api.php" );
+		$this->wikibaseApi = new MediawikiApi( 'https://www.wikidata.org/w/api.php', $guzzleClient );
 		$this->wikibaseFactory = new WikibaseFactory(
 			$this->wikibaseApi,
 			new DataValueDeserializer(
