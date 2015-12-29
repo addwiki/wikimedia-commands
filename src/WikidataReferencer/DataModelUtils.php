@@ -7,6 +7,7 @@ use DataValues\TimeValue;
 use Exception;
 use Wikibase\DataModel\Entity\PropertyId;
 use Wikibase\DataModel\Reference;
+use Wikibase\DataModel\SiteLinkList;
 use Wikibase\DataModel\Snak\PropertyValueSnak;
 use Wikibase\DataModel\Statement\Statement;
 use Wikibase\DataModel\Term\Fingerprint;
@@ -104,6 +105,25 @@ class DataModelUtils {
 	 */
 	private static function urlsDomainsAreSame( $a, $b ) {
 		return parse_url( $a, PHP_URL_HOST ) == parse_url( $b, PHP_URL_HOST );
+	}
+
+	/**
+	 * @param SiteLinkList $siteLinkList
+	 * @param string $suffix
+	 *
+	 * @return SiteLinkList
+	 */
+	public static function getSitelinksWiteSiteIdSuffix( SiteLinkList $siteLinkList, $suffix ) {
+		$filteredSiteLinkList = new SiteLinkList();
+
+		foreach ( $siteLinkList->getIterator() as $siteLink ) {
+			$siteId = $siteLink->getSiteId();
+			if ( substr( $siteId, -strlen( $suffix ) ) == $suffix ) {
+				$filteredSiteLinkList->addSiteLink( $siteLink );
+			}
+		}
+
+		return $filteredSiteLinkList;
 	}
 
 }

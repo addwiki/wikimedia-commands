@@ -7,8 +7,6 @@ use ArrayAccess;
 use DataValues\Deserializers\DataValueDeserializer;
 use DataValues\Serializers\DataValueSerializer;
 use Exception;
-use GuzzleHttp\Client;
-use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Pool;
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Request;
@@ -20,12 +18,13 @@ use Mediawiki\DataModel\Title;
 use Psr\Http\Message\ResponseInterface;
 use RuntimeException;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Helper\FormatterHelper;
+use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Wikibase\Api\WikibaseFactory;
 use Wikibase\DataModel\Entity\EntityIdValue;
-use Wikibase\DataModel\Entity\Item;
 use Wikibase\DataModel\Entity\ItemId;
 use Wikibase\DataModel\Entity\PropertyId;
 use Wikibase\DataModel\Services\Lookup\ItemLookupException;
@@ -230,8 +229,16 @@ class WikidataReferencerCommand extends Command {
 	}
 
 	protected function execute( InputInterface $input, OutputInterface $output ) {
-		$output->writeln( "THIS SCRIPT IS IN DEVELOPMENT (It's your fault if something goes wrong!)" );
-		$output->writeln( "Temp file: " . $this->getProcessedListPath() );
+		/** @var FormatterHelper $formatter */
+		$formatter = $this->getHelper('formatter');
+		$output->writeln( $formatter->formatBlock(
+			array(
+				'Wikidata Referencer',
+				'This script is in development, If something goes wrong while you use it it is your fault!',
+				'Temp file: ' . $this->getProcessedListPath(),
+			),
+			'info'
+		) );
 
 		// Get options
 		$user = $input->getOption( 'user' );
@@ -245,24 +252,24 @@ class WikidataReferencerCommand extends Command {
 
 		// Get a list of ItemIds
 		if( $item !== null ) {
+			$output->writeln( $formatter->formatSection( 'Init', 'Using item passed in item parameter' ) );
 			$itemIds = array( new ItemId( $item ) );
 			// Force if explicitly passed an ItemId
 			$force = true;
 		} elseif( !empty( $sparqlQueryParts ) ) {
-			$output->writeln( "Running SPARQL query with " . count( $sparqlQueryParts ) . ' parts' );
+			$output->writeln( $formatter->formatSection( 'Init', 'Using items from SPARQL QUERY (running)' ) );
 			$itemIds = $this->sparqlQueryRunner->getItemIdsForSimpleQueryParts( $sparqlQueryParts );
 		} else {
 			throw new RuntimeException( 'You must pass an instance id or an item' );
 		}
 		shuffle( $itemIds );
-		$output->writeln( "Got " . count( $itemIds ) . " items to investigate" );
+		$output->writeln( $formatter->formatSection( 'Init', 'Got ' . count( $itemIds ) . ' items to investigate' ) );
 
 		// Log in to Wikidata
 		$loggedIn =
 			$this->wikibaseApi->login( new ApiUser( $userDetails['username'], $userDetails['password'] ) );
 		if ( !$loggedIn ) {
-			$output->writeln( 'Failed to log in to wikibase wiki' );
-			return -1;
+			throw new RuntimeException( 'Failed to log in to wikibase wiki' );
 		}
 
 		$this->executeForItemIds(
@@ -282,21 +289,23 @@ class WikidataReferencerCommand extends Command {
 	private function executeForItemIds( OutputInterface $output, array $itemIds, $force ) {
 		$itemLookup = $this->wikibaseFactory->newItemLookup();
 		$processedItemIdStrings = $this->getProcessedItemIdStrings();
+		/** @var FormatterHelper $formatter */
+		$formatter = $this->getHelper('formatter');
 		foreach ( $itemIds as $itemId ) {
+			$itemIdString = $itemId->getSerialization();
 
-			$output->write( $itemId->getSerialization() . ' ' );
 
 			if( !$force && in_array( $itemId->getSerialization(), $processedItemIdStrings ) ) {
-				$output->writeln( "Already processed!" );
+				$output->writeln( $formatter->formatSection( $itemIdString, 'Already processed' ) );
 				continue;
 			}
 
 			try {
+				$output->writeln( $formatter->formatSection( $itemIdString, 'Loading Item' ) );
 				$item = $itemLookup->getItemForId( $itemId );
-				$output->write( 'I' );
 			}
 			catch ( ItemLookupException $e ) {
-				$output->writeln( "Failed to get item!" );
+				$output->writeln( $formatter->formatSection( $itemIdString, 'Failed to load item', 'error' ) );
 				continue;
 			}
 
@@ -314,11 +323,56 @@ class WikidataReferencerCommand extends Command {
 				}
 			}
 			if( empty( $types ) ) {
-				$output->writeln( " No matches instance ofs for item!" );
+				$output->writeln( $formatter->formatSection( $itemIdString, 'Didn\t find any useful instance of statements', 'comment' ) );
 				continue;
 			}
 
-			$links = $this->getExternalLinksFromItemWikipediaSitelinks( $item, $output );
+			// Note: only load Wikipedias
+			$siteLinkList = DataModelUtils::getSitelinksWiteSiteIdSuffix(
+				$item->getSiteLinkList(),
+				'wiki'
+			);
+
+			$output->writeln( $formatter->formatSection( $itemIdString, $siteLinkList->count() . ' Wikipedia pages to parse for links' ) );
+			$parseProgressBar = new ProgressBar( $output, $siteLinkList->count() * 2 );
+			$parseProgressBar->display();
+			/** @var PromiseInterface[] $parsePromises */
+			$parsePromises = array();
+			foreach ( $siteLinkList->getIterator() as $siteLink ) {
+				$siteId = $siteLink->getSiteId();
+				$pageName = $item->getSiteLinkList()->getBySiteId( $siteId )->getPageName();
+				$sourceMwFactory = $this->wmFactoryFactory->getFactory( $siteId );
+				$sourceParser = $sourceMwFactory->newParser();
+				$pageIdentifier = new PageIdentifier( new Title( $pageName ) );
+				$parsePromises[$siteId] = $sourceParser->parsePageAsync( $pageIdentifier );
+				$parseProgressBar->advance();
+			}
+			$links = array();
+			foreach ( $parsePromises as $siteId => $promise ) {
+				try {
+					$parseResult = $promise->wait();
+					if ( array_key_exists( 'externallinks', $parseResult ) ) {
+						foreach ( $parseResult['externallinks'] as $externalLink ) {
+							// Ignore archive.org links
+							if ( strstr( $externalLink, 'archive.org' ) === false ) {
+								$links[] = $this->normalizeExternalLink( $externalLink );
+							}
+						}
+					}
+				}
+				catch ( Exception $e ) {
+					$parseProgressBar->clear();
+					$output->writeln( $formatter->formatSection( $itemIdString, $e->getMessage(), 'error' ) );
+					$parseProgressBar->display();
+					$parseProgressBar->advance();
+					// Ignore failed requests
+				}
+				$parseProgressBar->advance();
+			}
+			$parseProgressBar->finish();
+			$output->writeln( '' );
+
+			$links = array_unique( $links );
 			shuffle( $links );
 
 			/** @var Request[] $linkRequests */
@@ -327,25 +381,36 @@ class WikidataReferencerCommand extends Command {
 				$linkRequests[] = new Request(
 					'GET',
 					$link,
-					array( 'allow_redirects' => array( 'track_redirects' => true ) )
+					array(
+						'allow_redirects' => array( 'track_redirects' => true ),
+						'connect_timeout' => 3.14,
+						'timeout' => 10,
+					)
 				);
 			}
 
+
+			$output->writeln( $formatter->formatSection( $itemIdString, count( $linkRequests ) . ' External links to load' ) );
 			if ( empty( $linkRequests ) ) {
-				$output->writeln( " No external links!" );
 				continue;
-			} else {
-				$output->write( ' ' . count( $linkRequests ) . ' external links: ' );
 			}
 
 			// Make a bunch of requests and act on the responses
+			$referencesAddedToItem = 0;
+			$externalLinkProgressBar = new ProgressBar( $output, count( $linkRequests ) );
+			$externalLinkProgressBar->display();
 			foreach( array_chunk( $linkRequests, 100 ) as $linkRequestChunk ) {
 				$linkResponses = Pool::batch(
 					$this->externalLinkClient,
 					$linkRequestChunk,
 					array(
-						'fulfilled' => function () use ( $output ) { $output->write( 'l' ); },
-						'rejected' => function () use ( $output ) { $output->write( 'e' ); },
+						'fulfilled' => function () use ( $externalLinkProgressBar ) {
+							$externalLinkProgressBar->advance();
+						},
+						'rejected' => function () use ( $externalLinkProgressBar ) {
+							// TODO add this to some kind of verbose log?
+							$externalLinkProgressBar->advance();
+						},
 					)
 				);
 				$linkToHtmlMap = array();
@@ -364,64 +429,18 @@ class WikidataReferencerCommand extends Command {
 								foreach( $this->referencerMap[$type] as $referencer ) {
 									/** @var Referencer $referencer */
 									$addedReferences = $referencer->addReferences( $microData, $item, $link );
-									$output->write( str_repeat( 'R', $addedReferences ) );
+									$referencesAddedToItem = $referencesAddedToItem + $addedReferences;
 								}
 						}
 					}
 				}
 			}
+			$externalLinkProgressBar->finish();
+			$output->writeln( '' );
+			$output->writeln( $formatter->formatSection( $itemIdString, $referencesAddedToItem . ' References added' ) );
 
-			$output->writeln('');
 			$this->markIdAsProcessed( $itemId );
 		}
-	}
-
-	/**
-	 * Parses wikipedia sitelinks for external links
-	 * TODO also get links currently used as references!
-	 *
-	 * @param Item $item
-	 * @param OutputInterface $output
-	 *
-	 * @return \string[]
-	 */
-	private function getExternalLinksFromItemWikipediaSitelinks( Item $item, OutputInterface $output ) {
-		$output->write( ' ' . $item->getSiteLinkList()->count() . ' site links: ' );
-
-		/** @var PromiseInterface[] $parsePromises */
-		$parsePromises = array();
-		foreach ( $item->getSiteLinkList()->getIterator() as $siteLink ) {
-			$siteId = $siteLink->getSiteId();
-			//Note: only load Wikipedias
-			if ( substr( $siteId, -4 ) == 'wiki' ) {
-				$pageName = $item->getSiteLinkList()->getBySiteId( $siteId )->getPageName();
-				$sourceMwFactory = $this->wmFactoryFactory->getFactory( $siteId );
-				$sourceParser = $sourceMwFactory->newParser();
-				$pageIdentifier = new PageIdentifier( new Title( $pageName ) );
-				$parsePromises[$siteId] = $sourceParser->parsePageAsync( $pageIdentifier );
-			}
-		}
-		$links = array();
-		foreach ( $parsePromises as $siteId => $promise ) {
-			try {
-				$parseResult = $promise->wait();
-				$output->write( 'p' );
-				if ( array_key_exists( 'externallinks', $parseResult ) ) {
-					foreach ( $parseResult['externallinks'] as $externalLink ) {
-						// Ignore archive.org links
-						if ( strstr( $externalLink, 'archive.org' ) === false ) {
-							$links[] = $this->normalizeExternalLink( $externalLink );
-						}
-					}
-				}
-			}
-			catch ( Exception $e ) {
-				$output->write( 'e' );
-				// Ignore failed requests
-			}
-		}
-
-		return array_unique( $links );
 	}
 
 	/**

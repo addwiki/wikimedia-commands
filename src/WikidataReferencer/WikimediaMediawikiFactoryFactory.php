@@ -30,6 +30,7 @@ class WikimediaMediawikiFactoryFactory {
 		if( $lastFour == 'wiki' ) {
 			$firstPart = substr($siteID, 0, -4);
 			if( strlen( $firstPart ) >= 2 ) {
+				$firstPart = str_replace( '_', '-', $firstPart );
 				return new MediawikiFactory(
 					new MediawikiApi(
 						"https://$firstPart.wikipedia.org/w/api.php",
