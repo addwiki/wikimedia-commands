@@ -3,6 +3,7 @@
 namespace Addwiki\Commands\Wikimedia\WikidataReferencer;
 
 use InvalidArgumentException;
+use Mediawiki\Api\Guzzle\ClientFactory;
 use Mediawiki\Api\MediawikiApi;
 use Mediawiki\Api\MediawikiFactory;
 
@@ -10,6 +11,12 @@ use Mediawiki\Api\MediawikiFactory;
  * @author Addshore
  */
 class WikimediaMediawikiFactoryFactory {
+
+	private $client;
+
+	public function __construct( ClientFactory $clientFactory ) {
+		$this->client = $clientFactory->getClient();
+	}
 
 	/**
 	 * @todo this could be in a lib? Also this needs more sites adding to it!
@@ -24,7 +31,10 @@ class WikimediaMediawikiFactoryFactory {
 			$firstPart = substr($siteID, 0, -4);
 			if( strlen( $firstPart ) >= 2 ) {
 				return new MediawikiFactory(
-					new MediawikiApi( "https://$firstPart.wikipedia.org/w/api.php" )
+					new MediawikiApi(
+						"https://$firstPart.wikipedia.org/w/api.php",
+						$this->client
+					)
 				);
 			}
 		}

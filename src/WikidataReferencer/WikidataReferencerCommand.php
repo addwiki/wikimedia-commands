@@ -13,6 +13,7 @@ use GuzzleHttp\Pool;
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Request;
 use Mediawiki\Api\ApiUser;
+use Mediawiki\Api\Guzzle\ClientFactory;
 use Mediawiki\Api\MediawikiApi;
 use Mediawiki\DataModel\PageIdentifier;
 use Mediawiki\DataModel\Title;
@@ -83,7 +84,7 @@ class WikidataReferencerCommand extends Command {
 
 		$this->appConfig = $appConfig;
 
-		$this->wmFactoryFactory = new WikimediaMediawikiFactoryFactory();
+		$this->wmFactoryFactory = new WikimediaMediawikiFactoryFactory( new ClientFactory() );
 		$this->microDataExtractor = new MicrodataExtractor();
 		$this->sparqlQueryRunner = new SparqlQueryRunner( $guzzleClient );
 		$this->externalLinkClient = $guzzleClient;
