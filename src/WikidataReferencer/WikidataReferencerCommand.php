@@ -158,6 +158,7 @@ class WikidataReferencerCommand extends Command {
 						'P136' => 'genre',
 					),
 					array(
+						//TODO generate this from SPARQL? // http://tinyurl.com/hdrurlu
 						'P136' => array(
 							'Q188473' => '/action( ?film)?/i',
 							'Q319221' => '/adventure( ?film)?/i',
