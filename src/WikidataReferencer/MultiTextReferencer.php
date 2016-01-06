@@ -85,8 +85,6 @@ class MultiTextReferencer implements Referencer {
 						continue;
 					}
 
-
-
 					// Add the new reference!
 					$newReference = DataModelUtils::getReferenceForUrl( $sourceUrl );
 

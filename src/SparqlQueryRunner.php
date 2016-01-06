@@ -78,4 +78,30 @@ class SparqlQueryRunner {
 		return $itemIds;
 	}
 
+	public function getItemIdStringsAndLabelsFromInstanceOf( $instanceItemIdString ){
+		//TODO fix this ugliness
+		$query = "PREFIX wd: <http://www.wikidata.org/entity/>
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+PREFIX wikibase: <http://wikiba.se/ontology#>
+SELECT ?item ?itemLabel WHERE {
+   ?item wdt:P31 wd:" . $instanceItemIdString . " .
+   SERVICE wikibase:label {
+    bd:serviceParam wikibase:language 'en' .
+   }
+ }";
+
+		$sparqlResponse = $this->client->get(
+			'https://query.wikidata.org/bigdata/namespace/wdq/sparql?format=json&query=' . urlencode( $query )
+		);
+		$sparqlArray = json_decode( $sparqlResponse->getBody(), true );
+
+		$data = array();
+		foreach( $sparqlArray['results']['bindings'] as $binding ) {
+			$data[str_replace( 'http://www.wikidata.org/entity/', '', $binding['item']['value'] )] =
+				$binding['itemLabel']['value'];
+		}
+
+		return $data;
+	}
+
 }

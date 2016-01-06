@@ -74,7 +74,10 @@ class WikidataReferencerCommand extends Command {
 
 	public function __construct( ArrayAccess $appConfig ) {
 		$this->appConfig = $appConfig;
+		parent::__construct( null );
+	}
 
+	public function initServices() {
 		$clientFactory = new ClientFactory(
 			array(
 				'middleware' => array( EffectiveUrlMiddleware::middleware() ),
@@ -107,6 +110,19 @@ class WikidataReferencerCommand extends Command {
 			),
 			new DataValueSerializer()
 		);
+
+		// Note: file can be updated using http://tinyurl.com/hdrurlu
+		$filmGenreData = $this->sparqlQueryRunner->getItemIdStringsAndLabelsFromInstanceOf( 'Q201658' );
+		$filmGenreRegexMap = array();
+		foreach( $filmGenreData as $itemIdString => $label ) {
+			if( preg_match( '/ films?/i', $label ) ) {
+				$regex = '/^' .  preg_replace( '/ films?/i', '( film)?', $label ) . '$/i';
+			} else {
+				$regex = '/^' . $label . '( film)?' . '$/i';
+			}
+			$regex = preg_replace( '/science ?fiction/i', '(science ?fiction|sci-fi)', $regex );
+			$filmGenreRegexMap[$itemIdString] = $regex;
+		}
 
 		$this->instanceMap = array(
 			'Q5' => 'Person',
@@ -158,13 +174,7 @@ class WikidataReferencerCommand extends Command {
 						'P136' => 'genre',
 					),
 					array(
-						//TODO generate this from SPARQL? // http://tinyurl.com/hdrurlu
-						'P136' => array(
-							'Q188473' => '/action( ?film)?/i',
-							'Q319221' => '/adventure( ?film)?/i',
-							'Q471839' => '/(Science Fiction|Sci-Fi)( ?film)?/i',
-							'Q157394' => '/fantasy( ?film)?/i',
-						),
+						'P136' => $filmGenreRegexMap,
 					)
 				),
 				new DateReferencer(
@@ -175,8 +185,6 @@ class WikidataReferencerCommand extends Command {
 				)
 			),
 		);
-
-		parent::__construct( null );
 	}
 
 	protected function configure() {
@@ -230,6 +238,8 @@ class WikidataReferencerCommand extends Command {
 	}
 
 	protected function execute( InputInterface $input, OutputInterface $output ) {
+		$this->initServices();
+
 		/** @var FormatterHelper $formatter */
 		$formatter = $this->getHelper('formatter');
 		$output->writeln( $formatter->formatBlock(
@@ -401,7 +411,7 @@ class WikidataReferencerCommand extends Command {
 			$referencesAddedToItem = 0;
 			$externalLinkProgressBar = new ProgressBar( $output, count( $linkRequests ) * 3 );
 			$externalLinkProgressBar->display();
-			foreach( array_chunk( $linkRequests, 100 ) as $linkRequestChunk ) {
+			foreach( array_chunk( $linkRequests, 25 ) as $linkRequestChunk ) {
 				$linkResponses = Pool::batch(
 					$this->externalLinkClient,
 					$linkRequestChunk,
@@ -409,6 +419,7 @@ class WikidataReferencerCommand extends Command {
 						'fulfilled' => function () use ( $externalLinkProgressBar ) {
 							$externalLinkProgressBar->advance(); // 2nd advance point
 						},
+
 						'rejected' => function () use ( $externalLinkProgressBar ) {
 							// TODO add this to some kind of verbose log?
 							$externalLinkProgressBar->advance(); // 2nd advance point
