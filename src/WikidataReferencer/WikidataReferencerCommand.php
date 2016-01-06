@@ -7,6 +7,7 @@ use ArrayAccess;
 use DataValues\Deserializers\DataValueDeserializer;
 use DataValues\Serializers\DataValueSerializer;
 use Exception;
+use GuzzleHttp\Client;
 use GuzzleHttp\Pool;
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Request;
@@ -71,6 +72,11 @@ class WikidataReferencerCommand extends Command {
 	 * @var string[]
 	 */
 	private $instanceMap = array();
+
+	/**
+	 * @var Client
+	 */
+	private $externalLinkClient;
 
 	public function __construct( ArrayAccess $appConfig ) {
 		$this->appConfig = $appConfig;
