@@ -41,20 +41,6 @@ class ExtensionToWikidata extends Command {
 			->setName( 'wm:exttowd' )
 			->setDescription( 'Edits the page' )
 			->addOption(
-				'sourcewiki',
-				null,
-				( $defaultWiki === null ? InputOption::VALUE_REQUIRED : InputOption::VALUE_OPTIONAL),
-				'The configured wiki to find extensions on (A Wikibase Client)',
-				$defaultWiki
-			)
-			->addOption(
-				'targetwiki',
-				null,
-				( $defaultWiki === null ? InputOption::VALUE_REQUIRED : InputOption::VALUE_OPTIONAL),
-				'The configured wiki to acc data to (A Wikibase Repo)',
-				$defaultWiki
-			)
-			->addOption(
 				'user',
 				null,
 				( $defaultUser === null ? InputOption::VALUE_REQUIRED : InputOption::VALUE_OPTIONAL),
@@ -70,23 +56,12 @@ class ExtensionToWikidata extends Command {
 	}
 
 	protected function execute( InputInterface $input, OutputInterface $output ) {
-		die( "This is work in progress code" );
-		$sourceWiki = $input->getOption( 'sourcewiki' );
-		$targetWiki = $input->getOption( 'targetwiki' );
 		$user = $input->getOption( 'user' );
 
 		$userDetails = $this->appConfig->get( 'users.' . $user );
-		$sourceWikiDetails = $this->appConfig->get( 'wikis.' . $sourceWiki );
-		$targetWikiDetails = $this->appConfig->get( 'wikis.' . $targetWiki );
 
 		if( $userDetails === null ) {
 			throw new RuntimeException( 'User not found in config' );
-		}
-		if( $sourceWikiDetails === null ) {
-			throw new RuntimeException( 'Wiki not found in config' );
-		}
-		if( $targetWikiDetails === null ) {
-			throw new RuntimeException( 'Wiki not found in config' );
 		}
 
 		$pageIdentifier = null;
@@ -97,8 +72,8 @@ class ExtensionToWikidata extends Command {
 			throw new RuntimeException( 'No titles was set!' );
 		}
 
-		$sourceApi = new MediawikiApi( $sourceWikiDetails['url'] );
-		$targetApi = new MediawikiApi( $targetWikiDetails['url'] );
+		$sourceApi = new MediawikiApi( "https://www.mediawiki.org/w/api.php" );
+		$targetApi = new MediawikiApi( "https://www.wikidata.org/w/api.php" );
 		$loggedIn = $targetApi->login( new ApiUser( $userDetails['username'], $userDetails['password'] ) );
 		if( !$loggedIn ) {
 			$output->writeln( 'Failed to log in to target wiki' );
@@ -110,16 +85,15 @@ class ExtensionToWikidata extends Command {
 		$parseResult = $sourceParser->parsePage( $pageIdentifier );
 
 		//Get the wikibase item if it exists
-		$wikibaseItemIdString = null;
+		$itemIdString = null;
 		if( array_key_exists( 'properties', $parseResult ) ) {
 			foreach( $parseResult['properties'] as $pageProp ) {
 				if( $pageProp['name'] == 'wikibase_item' ) {
-					$wikibaseItemIdString = $pageProp['*'];
+					$itemIdString = $pageProp['*'];
 				}
 			}
 		}
 
-		//$targetMwFactory = new MediawikiFactory( $targetApi );
 		$targetWbFactory = new WikibaseFactory(
 			$targetApi,
 			new DataValueDeserializer(
@@ -140,17 +114,42 @@ class ExtensionToWikidata extends Command {
 		);
 
 		// Create an item if there is no item yet!
-		if( $wikibaseItemIdString === null ) {
+		if( $itemIdString === null ) {
 			$output->writeln( "Creating a new Item" );
-			$newItem = new Item();
-			$newItem->setLabel( 'en', $sourceTitle );
+			$item = new Item();
+			$item->setLabel( 'en', $sourceTitle );
 			//TODO this siteid should come from somewhere?
-			$newItem->getSiteLinkList()->setNewSiteLink( 'mediawikiwiki', $sourceTitle );
+			$item->getSiteLinkList()->setNewSiteLink( 'mediawikiwiki', $sourceTitle );
 			$targetRevSaver = $targetWbFactory->newRevisionSaver();
-			$newItem = $targetRevSaver->save( new Revision( new Content( $newItem ) ) );
-			$wikibaseItemIdString = $newItem->getId()->serialize();
+			$item = $targetRevSaver->save( new Revision( new Content( $item ) ) );
+		} else {
+			$item = $targetWbFactory->newItemLookup()->getItemForId( new ItemId( $itemIdString ) );
 		}
 
+		// Add instance of if not already there
+		$hasInstanceOfExtension = false;
+		foreach( $item->getStatements()->getByPropertyId( new PropertyId( 'P31' ) )->getMainSnaks() as $mainSnak ) {
+			if( $mainSnak instanceof PropertyValueSnak ) {
+				/** @var EntityIdValue $dataValue */
+				$dataValue = $mainSnak->getDataValue();
+				if( $dataValue->getEntityId()->equals( new ItemId( 'Q6805426' ) ) ) {
+					$hasInstanceOfExtension = true;
+					break;
+				}
+			}
+		}
+		if( !$hasInstanceOfExtension ) {
+			$output->writeln( "Creating instance of Statement" );
+			$targetWbFactory->newStatementCreator()->create(
+				new PropertyValueSnak(
+					new PropertyId( 'P31' ),
+					new EntityIdValue( new ItemId( 'Q6805426' ) )
+				),
+				$item->getId()
+			);
+		}
+
+		// Try to add a licence
 		$catLicenseMap = array(
 			'Public_domain_licensed_extensions' => 'Q19652',
 		);
@@ -165,13 +164,13 @@ class ExtensionToWikidata extends Command {
 		if( $extensionLicenseItemIdString !== null ) {
 			$output->writeln( "Creating Licence Statement" );
 			$statementCreator = $targetWbFactory->newStatementCreator();
-			//TODO make sure it isn't already there?
+			//TODO make sure it isn't already there????
 			$statementCreator->create(
 				new PropertyValueSnak(
 					new PropertyId( 'P275' ),
 					new EntityIdValue( new ItemId( $extensionLicenseItemIdString ) )
 				),
-				$wikibaseItemIdString
+				$item->getId()
 			);
 		}
 
