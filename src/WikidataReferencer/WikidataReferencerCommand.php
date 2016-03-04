@@ -147,6 +147,7 @@ class WikidataReferencerCommand extends Command {
 						'P22' => 'parent',//father
 						'P25' => 'parent',//mother
 						'P26' => 'spouse',
+						'P40' => 'children',
 						'P27' => 'nationality',
 						'P734' => 'familyName',
 						'P735' => 'givenName',
@@ -172,6 +173,15 @@ class WikidataReferencerCommand extends Command {
 						'P58' => 'author',
 						// Organization
 						'P272' => array( 'creator', 'productionCompany' ),
+						// Content
+						'P364' => 'inLanguage',
+						'P674' => 'character',
+						'P840' => 'contentLocation',
+						//Metadata
+						'P166' => 'award',
+						'P1657' => 'contentRating',
+						'P2047' => 'duration',
+						'P2360' => 'audience',
 					)
 				),
 				new MultiTextReferencer(
