@@ -78,6 +78,11 @@ class WikidataReferencerCommand extends Command {
 	 */
 	private $externalLinkClient;
 
+	/**
+	 * @var string
+	 */
+	private $tmpDir;
+
 	public function __construct( ArrayAccess $appConfig ) {
 		$this->appConfig = $appConfig;
 		parent::__construct( null );
@@ -228,6 +233,12 @@ class WikidataReferencerCommand extends Command {
 				null,
 				InputOption::VALUE_OPTIONAL,
 				'Item to target'
+			)
+			->addOption(
+				'tmpDir',
+				null,
+				InputOption::VALUE_OPTIONAL,
+				'Temporary directory to store a processed ID list in'
 			);
 	}
 
@@ -255,6 +266,15 @@ class WikidataReferencerCommand extends Command {
 
 	protected function execute( InputInterface $input, OutputInterface $output ) {
 		$this->initServices();
+
+		if ( is_string( $input->getOption( 'tmpDir' ) ) ) {
+			$this->tmpDir = $input->getOption( 'tmpDir' );
+		} else {
+			$this->tmpDir = sys_get_temp_dir();
+		}
+		if ( !is_writable( $this->tmpDir ) ) {
+			throw new RuntimeException( 'Temp dir: ' . $this->tmpDir . ' is not writable' );
+		}
 
 		/** @var FormatterHelper $formatter */
 		$formatter = $this->getHelper('formatter');
@@ -497,7 +517,7 @@ class WikidataReferencerCommand extends Command {
 	}
 
 	private function getProcessedListPath() {
-		return sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'addwiki-wikidatareferencer-alreadydone.txt';
+		return $this->tmpDir . DIRECTORY_SEPARATOR . 'addwiki-wikidatareferencer-alreadydone.txt';
 	}
 
 }
