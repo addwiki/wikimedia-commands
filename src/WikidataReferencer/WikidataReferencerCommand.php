@@ -333,7 +333,12 @@ class WikidataReferencerCommand extends Command {
 				$item = $itemLookup->getItemForId( $itemId );
 			}
 			catch ( ItemLookupException $e ) {
-				$output->writeln( $formatter->formatSection( $itemIdString, 'Failed to load item', 'error' ) );
+				$output->writeln( $formatter->formatSection( $itemIdString, 'Failed to load item (exception)', 'error' ) );
+				continue;
+			}
+
+			if ( $item === null ) {
+				$output->writeln( $formatter->formatSection( $itemIdString, 'Failed to load item (null)', 'error' ) );
 				continue;
 			}
 
