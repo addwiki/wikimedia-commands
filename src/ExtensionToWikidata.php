@@ -39,7 +39,7 @@ class ExtensionToWikidata extends Command {
 
 		$this
 			->setName( 'wm:exttowd' )
-			->setDescription( 'Edits the page' )
+			->setDescription( 'Imports some Extension infomation from mediawiki.org to wikidata' )
 			->addOption(
 				'user',
 				null,
