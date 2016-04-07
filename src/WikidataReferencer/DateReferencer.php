@@ -6,6 +6,7 @@ use DataValues\TimeValue;
 use DateTime;
 use Exception;
 use Mediawiki\Api\UsageException;
+use Mediawiki\DataModel\EditInfo;
 use ValueParsers\EraParser;
 use ValueParsers\IsoTimestampParser;
 use ValueParsers\MonthNameUnlocalizer;
@@ -85,7 +86,9 @@ class DateReferencer implements Referencer {
 					try {
 						$this->wikibaseFactory->newReferenceSetter()->set(
 							$newReference,
-							$statement
+							$statement,
+							null,
+							new EditInfo( urldecode( $sourceUrl ), EditInfo::NOTMINOR, EditInfo::BOT )
 						);
 						//NOTE: keep our in memory item copy up to date (yay such reference passing)
 						$statement->addNewReference( $newReference->getSnaks() );

@@ -3,6 +3,7 @@
 namespace Addwiki\Commands\Wikimedia\WikidataReferencer;
 
 use Mediawiki\Api\UsageException;
+use Mediawiki\DataModel\EditInfo;
 use Wikibase\Api\WikibaseFactory;
 use Wikibase\DataModel\Entity\EntityId;
 use Wikibase\DataModel\Entity\EntityIdValue;
@@ -110,7 +111,9 @@ class ThingReferencer implements Referencer {
 					try {
 						$this->wikibaseFactory->newReferenceSetter()->set(
 							$newReference,
-							$statement
+							$statement,
+							null,
+							new EditInfo( urldecode( $sourceUrl ), EditInfo::NOTMINOR, EditInfo::BOT )
 						);
 						//NOTE: keep our in memory item copy up to date (yay such reference passing)
 						$statement->addNewReference( $newReference->getSnaks() );
