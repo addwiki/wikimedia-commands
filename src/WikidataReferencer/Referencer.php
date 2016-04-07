@@ -3,7 +3,6 @@
 namespace Addwiki\Commands\Wikimedia\WikidataReferencer;
 
 use Wikibase\DataModel\Entity\Item;
-use Wikibase\DataModel\Services\Lookup\InMemoryEntityLookup;
 
 /**
  * @author Addshore

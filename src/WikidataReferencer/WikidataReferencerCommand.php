@@ -361,8 +361,8 @@ class WikidataReferencerCommand extends Command {
 				'wiki'
 			);
 
-			$output->writeln( $formatter->formatSection( $itemIdString, $siteLinkList->count() . ' Wikipedia pages to (request, action)' ) );
-			$parseProgressBar = new ProgressBar( $output, $siteLinkList->count() * 2 );
+			$output->writeln( $formatter->formatSection( $itemIdString, $siteLinkList->count() . ' Wikipedia pages to request' ) );
+			$parseProgressBar = new ProgressBar( $output, $siteLinkList->count() );
 			$parseProgressBar->display();
 			/** @var PromiseInterface[] $parsePromises */
 			$parsePromises = array();
@@ -392,10 +392,8 @@ class WikidataReferencerCommand extends Command {
 					$parseProgressBar->clear();
 					$output->writeln( $formatter->formatSection( $itemIdString, $e->getMessage(), 'error' ) );
 					$parseProgressBar->display();
-					$parseProgressBar->advance();
 					// Ignore failed requests
 				}
-				$parseProgressBar->advance();
 			}
 			$parseProgressBar->finish();
 			$output->writeln( '' );
@@ -417,55 +415,59 @@ class WikidataReferencerCommand extends Command {
 				);
 			}
 
-
-			$output->writeln( $formatter->formatSection( $itemIdString, count( $linkRequests ) . ' External links to (request, download, action)' ) );
+			$output->writeln( $formatter->formatSection( $itemIdString, count( $linkRequests ) . ' External links to (download, action)' ) );
 			if ( empty( $linkRequests ) ) {
 				continue;
 			}
 
 			// Make a bunch of requests and act on the responses
 			$referencesAddedToItem = 0;
-			$externalLinkProgressBar = new ProgressBar( $output, count( $linkRequests ) * 3 );
+			$externalLinkProgressBar = new ProgressBar( $output, count( $linkRequests ) * 2 );
 			$externalLinkProgressBar->display();
-			foreach( array_chunk( $linkRequests, 25 ) as $linkRequestChunk ) {
-				$linkResponses = Pool::batch(
-					$this->externalLinkClient,
-					$linkRequestChunk,
-					array(
-						'fulfilled' => function () use ( $externalLinkProgressBar ) {
-							$externalLinkProgressBar->advance(); // 2nd advance point
-						},
 
-						'rejected' => function () use ( $externalLinkProgressBar ) {
-							// TODO add this to some kind of verbose log?
-							$externalLinkProgressBar->advance(); // 2nd advance point
-						},
-					)
-				);
-				$externalLinkProgressBar->advance( count( $linkRequestChunk ) ); // 1st advance point
-				$linkToHtmlMap = array();
-				foreach( $linkResponses as $response ) {
-					if( $response instanceof ResponseInterface ) {
-						$effectiveUrl = $response->getHeaderLine( 'X-GUZZLE-EFFECTIVE-URL' );
-						$linkToHtmlMap[$effectiveUrl] = $response->getBody();
-					}
-				}
+			$pool = new Pool(
+				$this->externalLinkClient,
+				$linkRequests,
+				array(
+					'fulfilled' => function ( $response )
+					use ( $externalLinkProgressBar, $item, $types, $referencesAddedToItem, $output ) {
+						$externalLinkProgressBar->advance(); // 1st advance point
 
-				// Get structured data from the responses
-				foreach( $linkToHtmlMap as $link => $html ) {
-					foreach( $this->microDataExtractor->extract( $html ) as $microData ) {
-						foreach( $types as $type ) {
-							if( $microData->hasType( $type ) && array_key_exists( $type, $this->referencerMap ) )
-								foreach( $this->referencerMap[$type] as $referencer ) {
-									/** @var Referencer $referencer */
-									$addedReferences = $referencer->addReferences( $microData, $item, $link );
-									$referencesAddedToItem = $referencesAddedToItem + $addedReferences;
+						if ( $response instanceof ResponseInterface ) {
+							$link = $response->getHeaderLine( 'X-GUZZLE-EFFECTIVE-URL' );
+							$html = $response->getBody();
+							$referencesAddedFromLink = 0;
+
+							foreach( $this->microDataExtractor->extract( $html ) as $microData ) {
+								foreach( $types as $type ) {
+									if( $microData->hasType( $type ) && array_key_exists( $type, $this->referencerMap ) )
+										foreach( $this->referencerMap[$type] as $referencer ) {
+											/** @var Referencer $referencer */
+											$addedReferences = $referencer->addReferences( $microData, $item, $link );
+											$referencesAddedToItem += $addedReferences;
+											$referencesAddedFromLink += $addedReferences;
+										}
 								}
+							}
+							if ( $referencesAddedFromLink > 0 ) {
+								$externalLinkProgressBar->clear();
+								$output->write( "\x0D" );
+								$output->writeln( $referencesAddedFromLink . ' reference(s) added from ' . urldecode( $link ) );
+								$externalLinkProgressBar->display();
+							}
+
 						}
-					}
-					$externalLinkProgressBar->advance(); // 3rd advance point
-				}
-			}
+						$externalLinkProgressBar->advance(); // 2nd advance point
+					},
+
+					'rejected' => function () use ( $externalLinkProgressBar ) {
+						// TODO add this to some kind of verbose log?
+						$externalLinkProgressBar->advance(); // 1st advance point
+					},
+				)
+			);
+
+			$pool->promise()->wait();
 			$externalLinkProgressBar->finish();
 			$output->writeln( '' );
 			$output->writeln( $formatter->formatSection( $itemIdString, $referencesAddedToItem . ' References added' ) );
@@ -480,13 +482,13 @@ class WikidataReferencerCommand extends Command {
 	private function getProcessedItemIdStrings() {
 		$path = $this->getProcessedListPath();
 		if( file_exists( $path ) ) {
-			return explode( "\n", file_get_contents( $path ) );
+			return explode( PHP_EOL, file_get_contents( $path ) );
 		}
 		return array();
 	}
 
 	private function markIdAsProcessed( ItemId $itemId ) {
-		file_put_contents( $this->getProcessedListPath(), $itemId->getSerialization() . "\n", FILE_APPEND );
+		file_put_contents( $this->getProcessedListPath(), $itemId->getSerialization() . PHP_EOL, FILE_APPEND );
 	}
 
 	private function getProcessedListPath() {
