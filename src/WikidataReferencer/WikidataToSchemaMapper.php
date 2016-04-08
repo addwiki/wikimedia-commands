@@ -6,10 +6,22 @@ use Addwiki\Commands\Wikimedia\SparqlQueryRunner;
 use Wikibase\Api\WikibaseFactory;
 
 /**
+ * Class containing detail of what types of items the script recognises and will try to reference
+ * as well as how to try and reference them.
+ *
+ * All details withing this class are essentially mappings between Wikidata.org and Schema.org
+ *
  * @author Addshore
+ * @author Ainali
  */
 class WikidataToSchemaMapper {
 
+	/**
+	 * This method needs to be changed to allow the script to recognize more types of item.
+	 * Details of how references could be created should also be added to the getReferencerMap method.
+	 *
+	 * @return string[] like array( 'ItemID' => 'Schema.org_type' )
+	 */
 	public function getInstanceMap() {
 		return array(
 			'Q5' => 'Person',
@@ -17,6 +29,14 @@ class WikidataToSchemaMapper {
 		);
 	}
 
+	/**
+	 * This method needs to be changed to allow the script to know how to create more references.
+	 *
+	 * @param WikibaseFactory $wikibaseFactory
+	 * @param SparqlQueryRunner $sparqlQueryRunner
+	 *
+	 * @return array like array( 'Schema.org_type' => Referencer[] )
+	 */
 	public function getReferencerMap(
 		WikibaseFactory $wikibaseFactory,
 		SparqlQueryRunner $sparqlQueryRunner
