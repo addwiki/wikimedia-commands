@@ -3,6 +3,9 @@
 namespace Addwiki\Commands\Wikimedia\WikidataReferencer;
 
 use Addwiki\Commands\Wikimedia\SparqlQueryRunner;
+use Addwiki\Commands\Wikimedia\WikidataReferencer\Referencers\DateReferencer;
+use Addwiki\Commands\Wikimedia\WikidataReferencer\Referencers\MultiTextReferencer;
+use Addwiki\Commands\Wikimedia\WikidataReferencer\Referencers\ThingReferencer;
 use Wikibase\Api\WikibaseFactory;
 
 /**

@@ -1,7 +1,9 @@
 <?php
 
-namespace Addwiki\Commands\Wikimedia\WikidataReferencer;
+namespace Addwiki\Commands\Wikimedia\WikidataReferencer\Referencers;
 
+use Addwiki\Commands\Wikimedia\WikidataReferencer\DataModelUtils;
+use Addwiki\Commands\Wikimedia\WikidataReferencer\MicroData\MicroData;
 use Mediawiki\Api\UsageException;
 use Mediawiki\DataModel\EditInfo;
 use Wikibase\Api\WikibaseFactory;

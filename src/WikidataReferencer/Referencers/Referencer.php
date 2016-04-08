@@ -1,7 +1,8 @@
 <?php
 
-namespace Addwiki\Commands\Wikimedia\WikidataReferencer;
+namespace Addwiki\Commands\Wikimedia\WikidataReferencer\Referencers;
 
+use Addwiki\Commands\Wikimedia\WikidataReferencer\MicroData\MicroData;
 use Wikibase\DataModel\Entity\Item;
 
 /**

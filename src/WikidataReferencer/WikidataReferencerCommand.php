@@ -3,6 +3,8 @@
 namespace Addwiki\Commands\Wikimedia\WikidataReferencer;
 
 use Addwiki\Commands\Wikimedia\SparqlQueryRunner;
+use Addwiki\Commands\Wikimedia\WikidataReferencer\MicroData\MicroDataExtractor;
+use Addwiki\Commands\Wikimedia\WikidataReferencer\Referencers\Referencer;
 use ArrayAccess;
 use DataValues\Deserializers\DataValueDeserializer;
 use DataValues\Serializers\DataValueSerializer;
@@ -59,7 +61,7 @@ class WikidataReferencerCommand extends Command {
 	private $wmFactoryFactory;
 
 	/**
-	 * @var MicrodataExtractor
+	 * @var MicroDataExtractor
 	 */
 	private $microDataExtractor;
 
@@ -98,7 +100,7 @@ class WikidataReferencerCommand extends Command {
 		$guzzleClient = $clientFactory->getClient();
 
 		$this->wmFactoryFactory = new WikimediaMediawikiFactoryFactory( $clientFactory );
-		$this->microDataExtractor = new MicrodataExtractor();
+		$this->microDataExtractor = new MicroDataExtractor();
 		$this->sparqlQueryRunner = new SparqlQueryRunner( $guzzleClient );
 		$this->externalLinkClient = $guzzleClient;
 

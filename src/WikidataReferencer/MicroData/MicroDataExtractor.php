@@ -1,13 +1,13 @@
 <?php
 
-namespace Addwiki\Commands\Wikimedia\WikidataReferencer;
+namespace Addwiki\Commands\Wikimedia\WikidataReferencer\MicroData;
 
 use linclark\MicrodataPHP\MicrodataPhp;
 
 /**
  * @author Addshore
  */
-class MicrodataExtractor {
+class MicroDataExtractor {
 
 	/**
 	 * @param string $html raw HTML
