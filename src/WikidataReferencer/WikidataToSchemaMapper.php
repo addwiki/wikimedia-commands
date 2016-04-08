@@ -87,7 +87,7 @@ class WikidataToSchemaMapper {
 						//Metadata
 						'P166' => 'award',
 						'P1657' => 'contentRating',
-						'P2047' => 'duration',
+						//'P2047' => 'duration',//duration is a Quantity not an Item type
 						'P2360' => 'audience',
 					)
 				),
