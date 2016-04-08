@@ -122,89 +122,11 @@ class WikidataReferencerCommand extends Command {
 			new DataValueSerializer()
 		);
 
-		// Note: file can be updated using http://tinyurl.com/hdrurlu
-		$filmGenreData = $this->sparqlQueryRunner->getItemIdStringsAndLabelsFromInstanceOf( 'Q201658' );
-		$filmGenreRegexMap = array();
-		foreach( $filmGenreData as $itemIdString => $label ) {
-			if( preg_match( '/ films?/i', $label ) ) {
-				$regex = '/^' .  preg_replace( '/ films?/i', '( film)?', $label ) . '$/i';
-			} else {
-				$regex = '/^' . $label . '( film)?' . '$/i';
-			}
-			$regex = preg_replace( '/science ?fiction/i', '(science ?fiction|sci-fi)', $regex );
-			$filmGenreRegexMap[$itemIdString] = $regex;
-		}
-
-		$this->instanceMap = array(
-			'Q5' => 'Person',
-			'Q11424' => 'Movie',
-		);
-		$this->referencerMap = array(
-			'Person' => array(
-				new ThingReferencer(
-					$this->wikibaseFactory,
-					array(
-						'P7' => 'sibling',//brother
-						'P9' => 'sibling',//sister
-						'P19' => 'birthPlace',
-						'P20' => 'deathPlace',
-						'P21' => 'gender',
-						'P22' => 'parent',//father
-						'P25' => 'parent',//mother
-						'P26' => 'spouse',
-						'P40' => 'children',
-						'P27' => 'nationality',
-						'P734' => 'familyName',
-						'P735' => 'givenName',
-					)
-				),
-				new DateReferencer(
-					$this->wikibaseFactory,
-					array(
-						'P569' => 'birthDate',
-						'P570' => 'deathDate',
-					)
-				)
-			),
-			'Movie' => array(
-				new ThingReferencer(
-					$this->wikibaseFactory,
-					array(
-						// Person
-						'P57' => 'director',
-						'P161' => 'actor',
-						'P162' => 'producer',
-						'P1040' => 'editor',
-						'P58' => 'author',
-						// Organization
-						'P272' => array( 'creator', 'productionCompany' ),
-						// Content
-						'P364' => 'inLanguage',
-						'P674' => 'character',
-						'P840' => 'contentLocation',
-						//Metadata
-						'P166' => 'award',
-						'P1657' => 'contentRating',
-						'P2047' => 'duration',
-						'P2360' => 'audience',
-					)
-				),
-				new MultiTextReferencer(
-					$this->wikibaseFactory,
-					array(
-						'P136' => 'genre',
-					),
-					array(
-						'P136' => $filmGenreRegexMap,
-					)
-				),
-				new DateReferencer(
-					$this->wikibaseFactory,
-					array(
-						'P577' => 'datePublished',
-					)
-				)
-			),
+		$mapper = new WikidataToSchemaMapper();
+		$this->instanceMap = $mapper->getInstanceMap();
+		$this->referencerMap = $mapper->getReferencerMap(
+			$this->wikibaseFactory,
+			$this->sparqlQueryRunner
 		);
 	}
 
