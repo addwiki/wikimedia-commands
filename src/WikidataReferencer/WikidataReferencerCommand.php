@@ -336,13 +336,18 @@ class WikidataReferencerCommand extends Command {
 	private function executeForItemIds( OutputInterface $output, array $itemIds, $force ) {
 		$itemLookup = $this->wikibaseFactory->newItemLookup();
 		$processedItemIdStrings = $this->getProcessedItemIdStrings();
+		$loopCounter = 0;
 		/** @var FormatterHelper $formatter */
 		$formatter = $this->getHelper('formatter');
 		foreach ( $itemIds as $itemId ) {
+			$loopCounter++;
 			$itemIdString = $itemId->getSerialization();
 
 			$output->writeln( '----------------------------------------------------' );
 
+			if( $loopCounter %10 != 0 ) {
+				$processedItemIdStrings = $this->getProcessedItemIdStrings();
+			}
 			if( !$force && in_array( $itemId->getSerialization(), $processedItemIdStrings ) ) {
 				$output->writeln( $formatter->formatSection( $itemIdString, 'Already processed' ) );
 				continue;
