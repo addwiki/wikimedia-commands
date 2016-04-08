@@ -8,7 +8,7 @@ use DataValues\Deserializers\DataValueDeserializer;
 use DataValues\Serializers\DataValueSerializer;
 use Exception;
 use GuzzleHttp\Client;
-use GuzzleHttp\Pool;
+use GuzzleHttp\Pool as RequestPool;
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Request;
 use Mediawiki\Api\ApiUser;
@@ -18,6 +18,8 @@ use Mediawiki\DataModel\PageIdentifier;
 use Mediawiki\DataModel\Title;
 use Psr\Http\Message\ResponseInterface;
 use RuntimeException;
+use Stash\Driver\FileSystem;
+use Stash\Pool;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Helper\FormatterHelper;
 use Symfony\Component\Console\Helper\ProgressBar;
@@ -78,17 +80,21 @@ class WikidataReferencerCommand extends Command {
 	 */
 	private $externalLinkClient;
 
+	private $oldProcessedListPath;
+
 	/**
-	 * @var string
+	 * @var Pool
 	 */
-	private $tmpDir;
+	private $cache;
 
 	public function __construct( ArrayAccess $appConfig ) {
 		$this->appConfig = $appConfig;
 		parent::__construct( null );
 	}
 
-	public function initServices() {
+	public function initServices( $tmpDir ) {
+		$this->cache = new Pool( new FileSystem( array('path' => $tmpDir ) ) );
+		$this->oldProcessedListPath = $tmpDir . DIRECTORY_SEPARATOR . 'addwiki-wikidatareferencer-alreadydone.txt';
 		$clientFactory = new ClientFactory(
 			array(
 				'middleware' => array( EffectiveUrlMiddleware::middleware() ),
@@ -265,16 +271,19 @@ class WikidataReferencerCommand extends Command {
 	}
 
 	protected function execute( InputInterface $input, OutputInterface $output ) {
-		$this->initServices();
-
 		if ( is_string( $input->getOption( 'tmpDir' ) ) ) {
-			$this->tmpDir = $input->getOption( 'tmpDir' );
+			$tmpDir = $input->getOption( 'tmpDir' );
 		} else {
-			$this->tmpDir = sys_get_temp_dir();
+			$tmpDir = sys_get_temp_dir();
 		}
-		if ( !is_writable( $this->tmpDir ) ) {
-			throw new RuntimeException( 'Temp dir: ' . $this->tmpDir . ' is not writable' );
+		if ( !is_writable( $tmpDir ) ) {
+			throw new RuntimeException( 'Temp dir: ' . $tmpDir . ' is not writable' );
 		}
+
+		$this->initServices( $tmpDir );
+		unset( $tmpDir );
+
+		$this->markLegacyProcessedIdsInCache();
 
 		/** @var FormatterHelper $formatter */
 		$formatter = $this->getHelper('formatter');
@@ -282,7 +291,6 @@ class WikidataReferencerCommand extends Command {
 			array(
 				'Wikidata Referencer',
 				'This script is in development, If something goes wrong while you use it it is your fault!',
-				'Temp file: ' . $this->getProcessedListPath(),
 			),
 			'info'
 		) );
@@ -335,7 +343,6 @@ class WikidataReferencerCommand extends Command {
 	 */
 	private function executeForItemIds( OutputInterface $output, array $itemIds, $force ) {
 		$itemLookup = $this->wikibaseFactory->newItemLookup();
-		$processedItemIdStrings = $this->getProcessedItemIdStrings();
 		/** @var FormatterHelper $formatter */
 		$formatter = $this->getHelper('formatter');
 		foreach ( $itemIds as $itemId ) {
@@ -343,7 +350,7 @@ class WikidataReferencerCommand extends Command {
 
 			$output->writeln( '----------------------------------------------------' );
 
-			if( !$force && in_array( $itemId->getSerialization(), $processedItemIdStrings ) ) {
+			if( !$force && $this->isIdProcessed( $itemId ) ) {
 				$output->writeln( $formatter->formatSection( $itemIdString, 'Already processed' ) );
 				continue;
 			}
@@ -450,7 +457,7 @@ class WikidataReferencerCommand extends Command {
 			$externalLinkProgressBar = new ProgressBar( $output, count( $linkRequests ) * 2 );
 			$externalLinkProgressBar->display();
 
-			$pool = new Pool(
+			$pool = new RequestPool(
 				$this->externalLinkClient,
 				$linkRequests,
 				array(
@@ -501,23 +508,22 @@ class WikidataReferencerCommand extends Command {
 		}
 	}
 
-	/**
-	 * @return string[] ItemId serializations Q12 etc
-	 */
-	private function getProcessedItemIdStrings() {
-		$path = $this->getProcessedListPath();
+	private function markLegacyProcessedIdsInCache() {
+		$path = $this->oldProcessedListPath;
 		if( file_exists( $path ) ) {
-			return explode( PHP_EOL, file_get_contents( $path ) );
+			$list = explode( PHP_EOL, file_get_contents( $path ) );
+			foreach( $list as $itemIdString ) {
+				$this->markIdAsProcessed( new ItemId( $itemIdString ) );
+			}
 		}
-		return array();
 	}
 
 	private function markIdAsProcessed( ItemId $itemId ) {
-		file_put_contents( $this->getProcessedListPath(), $itemId->getSerialization() . PHP_EOL, FILE_APPEND );
+		$this->cache->getItem( 'processed/' . $itemId )->set( 1 )->save();
 	}
 
-	private function getProcessedListPath() {
-		return $this->tmpDir . DIRECTORY_SEPARATOR . 'addwiki-wikidatareferencer-alreadydone.txt';
+	private function isIdProcessed( ItemId $itemId ) {
+		return $this->cache->hasItem( 'processed/' . $itemId );
 	}
 
 }
