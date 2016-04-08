@@ -25,6 +25,7 @@ class WikidataToSchemaMapper {
 	public function getInstanceMap() {
 		return array(
 			'Q5' => 'Person',
+			'Q571' => 'Book',
 			'Q11424' => 'Movie',
 		);
 	}
@@ -42,6 +43,23 @@ class WikidataToSchemaMapper {
 		SparqlQueryRunner $sparqlQueryRunner
 	) {
 		return array(
+			'Book' => array(
+				new ThingReferencer(
+					$wikibaseFactory,
+					array(
+						'P50' => 'author',
+						'P110' => 'illustrator',
+						'P123' => 'publisher',
+						'P136' => 'genre',
+					)
+				),
+				new DateReferencer(
+					$wikibaseFactory,
+					array(
+						'P577' => 'datePublished',
+					)
+				),
+			),
 			'Person' => array(
 				new ThingReferencer(
 					$wikibaseFactory,
